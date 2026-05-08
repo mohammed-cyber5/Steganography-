@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StegoVault — Hidden Message Cryptography</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0a0a0f; --paper: #f5f3ef; --mid: #e8e4dc;
+    --glow: #4f46e5; --warn: #ef4444; --ok: #10b981;
+    --muted: #6b7280; --card: #ffffff;
+    --mono: 'Space Mono', monospace; --sans: 'Syne', sans-serif;
+    --radius: 4px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(79,70,229,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.04) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none; z-index: 0;
+  }
+  .wrap { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 24px; }
+  header { border-bottom: 2px solid var(--ink); background: var(--paper); position: sticky; top: 0; z-index: 100; }
+  .header-inner { display: flex; align-items: center; justify-content: space-between; max-width: 900px; margin: 0 auto; padding: 16px 24px; flex-wrap: wrap; gap: 10px; }
+  .logo { display: flex; align-items: baseline; gap: 8px; }
+  .logo-mark { width: 28px; height: 28px; background: var(--ink); display: grid; place-items: center; font-family: var(--mono); font-size: 12px; color: var(--paper); font-weight: 700; flex-shrink: 0; }
+  .logo-text { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo-sub { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  .tabs { display: flex; border: 2px solid var(--ink); border-radius: var(--radius); overflow: hidden; }
+  .tab-btn { padding: 8px 16px; background: transparent; border: none; cursor: pointer; font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; transition: all 0.15s; white-space: nowrap; border-right: 2px solid var(--ink); }
+  .tab-btn:last-child { border-right: none; }
+  .tab-btn.active { background: var(--ink); color: var(--paper); }
+  .tab-btn:not(.active):hover { background: var(--mid); }
+  main { padding: 40px 0 80px; }
+  .section-header { margin-bottom: 32px; }
+  .section-tag { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px; }
+  .section-title { font-size: 32px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+  .section-desc { font-size: 14px; color: var(--muted); margin-top: 8px; }
+  .steps { display: flex; flex-direction: column; }
+  .step { display: grid; grid-template-columns: 48px 1fr; position: relative; }
+  .step-left { display: flex; flex-direction: column; align-items: center; padding-top: 2px; }
+  .step-num { width: 32px; height: 32px; border: 2px solid var(--ink); border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 700; background: var(--paper); flex-shrink: 0; position: relative; z-index: 1; }
+  .step-line { width: 2px; flex: 1; background: var(--mid); margin-top: 4px; min-height: 24px; }
+  .step:last-child .step-line { display: none; }
+  .step-body { padding: 0 0 32px 16px; }
+  .step-label { font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 12px; padding-top: 4px; display: flex; align-items: center; gap: 8px; }
+  input[type="file"] { display: none; }
+  .drop-zone { border: 2px dashed var(--mid); border-radius: var(--radius); padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--card); user-select: none; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--glow); background: rgba(79,70,229,0.02); }
+  .drop-icon { font-size: 32px; margin-bottom: 8px; }
+  .drop-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .drop-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .file-info { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--card); border: 2px solid var(--ink); border-radius: var(--radius); margin-top: 12px; }
+  .file-preview { width: 48px; height: 48px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+  .file-meta { flex: 1; min-width: 0; }
+  .file-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-size { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+  textarea { width: 100%; padding: 14px 16px; background: var(--card); border: 2px solid var(--mid); border-radius: var(--radius); font-family: var(--sans); font-size: 14px; resize: vertical; min-height: 100px; transition: border-color 0.15s; outline: none; color: var(--ink); }
+  textarea:focus { border-color: var(--glow); }
+  .input-wrap { position: relative; }
+  input[type="password"], input[type="text"] { width: 100%; padding: 12px 48px 12px 16px; background: var(--card); border: 2px solid var(--mid); border-radius: var(--radius); font-family: var(--sans); font-size: 14px; outline: none; color: var(--ink); transition: border-color 0.15s; display: block; }
+  input[type="password"]:focus, input[type="text"]:focus { border-color: var(--glow); }
+  .pw-toggle { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 16px; color: var(--muted); padding: 4px; }
+  .char-count { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 6px; text-align: right; }
+  .btn-primary { width: 100%; padding: 16px 32px; background: var(--ink); color: var(--paper); border: 2px solid var(--ink); border-radius: var(--radius); font-family: var(--sans); font-size: 15px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .btn-primary:hover { background: var(--glow); border-color: var(--glow); }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .progress-bar { height: 3px; background: var(--mid); border-radius: 2px; overflow: hidden; margin-top: 12px; }
+  .progress-fill { height: 100%; background: var(--glow); width: 0%; transition: width 0.3s ease; border-radius: 2px; }
+  .results-panel { border: 2px solid var(--ink); border-radius: var(--radius); overflow: hidden; margin-top: 32px; display: none; }
+  .results-panel.show { display: block; animation: fadeUp 0.3s ease; }
+  .results-header { padding: 14px 20px; background: var(--ink); color: var(--paper); display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .results-body { padding: 20px; background: var(--card); }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .result-grid { grid-template-columns: 1fr; } }
+  .result-item { padding: 12px 14px; background: var(--paper); border-radius: var(--radius); border: 1px solid var(--mid); }
+  .result-label { font-size: 10px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+  .result-value { font-family: var(--mono); font-size: 12px; word-break: break-all; line-height: 1.5; }
+  .result-item.full { grid-column: 1 / -1; }
+  .integrity-box { padding: 14px 20px; border-radius: var(--radius); display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 14px; margin-top: 12px; }
+  .integrity-box.ok { background: rgba(16,185,129,0.1); border: 2px solid var(--ok); color: var(--ok); }
+  .integrity-box.fail { background: rgba(239,68,68,0.1); border: 2px solid var(--warn); color: var(--warn); }
+  .stego-preview { width: 100%; border-radius: var(--radius); border: 1px solid var(--mid); margin-bottom: 12px; max-height: 300px; object-fit: contain; background: #f0f0f0; display: none; }
+  .stego-preview.show { display: block; }
+  .btn-download { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border: 2px solid var(--ink); background: transparent; border-radius: var(--radius); font-family: var(--sans); font-size: 13px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+  .btn-download:hover { background: var(--ink); color: var(--paper); }
+  .error-msg { padding: 12px 16px; background: rgba(239,68,68,0.08); border: 2px solid var(--warn); border-radius: var(--radius); font-size: 13px; color: var(--warn); margin-top: 12px; display: none; }
+  .error-msg.show { display: block; }
+  .page { display: none; }
+  .page.active { display: block; }
+  .plaintext-result { padding: 16px; background: var(--paper); border: 1px solid var(--mid); border-radius: var(--radius); font-size: 15px; line-height: 1.6; position: relative; min-height: 48px; }
+  .copy-btn-abs { position: absolute; top: 10px; right: 10px; padding: 4px 10px; border: 1px solid var(--mid); background: var(--card); border-radius: var(--radius); font-size: 11px; font-family: var(--mono); cursor: pointer; transition: all 0.15s; }
+  .copy-btn-abs:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; display: none; }
+  .spinner.show { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .cap-bar { height: 6px; background: var(--mid); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .cap-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .cap-fill.low { background: var(--ok); }
+  .cap-fill.med { background: #f59e0b; }
+  .cap-fill.high { background: var(--warn); }
+  .divider { height: 1px; background: var(--mid); margin: 16px 0; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── TRANSFER TAB STYLES ── */
+  .transfer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 640px) { .transfer-grid { grid-template-columns: 1fr; } }
+
+  .peer-card {
+    border: 2px solid var(--ink); border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .peer-card-head {
+    padding: 12px 16px; background: var(--ink); color: var(--paper);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .peer-card-body { padding: 20px; background: var(--card); }
+
+  .peer-id-box {
+    padding: 14px 16px;
+    background: var(--paper); border: 2px solid var(--mid);
+    border-radius: var(--radius);
+    font-family: var(--mono); font-size: 22px; font-weight: 700;
+    letter-spacing: 0.2em; text-align: center; color: var(--glow);
+    margin-bottom: 12px;
+  }
+  .peer-id-box.waiting { color: var(--muted); font-size: 13px; letter-spacing: 0; font-weight: 400; }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.online  { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .status-dot.busy    { background: #f59e0b; }
+  .status-dot.error   { background: var(--warn); }
+
+  .status-line {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    display: flex; align-items: center; gap: 6px; margin-bottom: 16px;
+  }
+
+  .code-input {
+    width: 100%; padding: 12px 16px;
+    background: var(--card); border: 2px solid var(--mid);
+    border-radius: var(--radius);
+    font-family: var(--mono); font-size: 20px; font-weight: 700;
+    letter-spacing: 0.15em; text-align: center; color: var(--ink);
+    outline: none; text-transform: uppercase;
+    transition: border-color 0.15s;
+  }
+  .code-input:focus { border-color: var(--glow); }
+  .code-input::placeholder { font-size: 13px; letter-spacing: 0; font-weight: 400; color: var(--muted); text-transform: none; }
+
+  .btn-secondary {
+    width: 100%; padding: 12px 20px;
+    background: transparent; color: var(--ink);
+    border: 2px solid var(--ink); border-radius: var(--radius);
+    font-family: var(--sans); font-size: 13px; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 10px;
+  }
+  .btn-secondary:hover { background: var(--ink); color: var(--paper); }
+  .btn-secondary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .transfer-progress-wrap {
+    margin-top: 16px; display: none;
+  }
+  .transfer-progress-label {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    display: flex; justify-content: space-between; margin-bottom: 6px;
+  }
+  .xfer-bar { height: 8px; background: var(--mid); border-radius: 4px; overflow: hidden; }
+  .xfer-fill { height: 100%; background: var(--glow); width: 0%; border-radius: 4px; transition: width 0.2s; }
+
+  .received-panel {
+    margin-top: 20px; display: none;
+    border: 2px solid var(--ok); border-radius: var(--radius); overflow: hidden;
+  }
+  .received-panel.show { display: block; animation: fadeUp 0.3s ease; }
+  .received-head { padding: 12px 16px; background: var(--ok); color: white; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+  .received-body { padding: 16px; background: var(--card); }
+  .received-img { width: 100%; max-height: 220px; object-fit: contain; border-radius: var(--radius); border: 1px solid var(--mid); margin-bottom: 12px; }
+
+  .how-box {
+    background: var(--card); border: 1px solid var(--mid);
+    border-radius: var(--radius); padding: 16px 20px;
+    margin-bottom: 28px;
+  }
+  .how-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; color: var(--muted); }
+  .how-steps { display: flex; flex-direction: column; gap: 6px; }
+  .how-step { font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
+  .how-step span:first-child { font-family: var(--mono); font-size: 11px; background: var(--ink); color: var(--paper); padding: 2px 6px; border-radius: 2px; flex-shrink: 0; margin-top: 1px; }
+
+  .qr-area { text-align: center; margin-top: 12px; }
+  .copy-id-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border: 1px solid var(--mid); background: var(--paper);
+    border-radius: var(--radius); font-family: var(--mono); font-size: 11px;
+    cursor: pointer; transition: all 0.15s; margin-top: 4px;
+  }
+  .copy-id-btn:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+</style>
+</head>
+<body>
+
+<input type="file" id="hide-file" accept="image/*">
+<input type="file" id="extract-file" accept="image/*">
+<input type="file" id="transfer-file" accept="image/*">
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-mark">S</div>
+      <div>
+        <div class="logo-text">StegoVault</div>
+        <div class="logo-sub">Client-Side · Zero-Server</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('hide')">◀ Hide</button>
+      <button class="tab-btn" onclick="switchTab('extract')">Extract ▶</button>
+      <button class="tab-btn" onclick="switchTab('transfer')">📡 Transfer</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <!-- ══ HIDE PAGE ══════════════════════════════════════════ -->
+    <div class="page active" id="page-hide">
+      <div class="section-header">
+        <div class="section-tag">// Mode 01</div>
+        <div class="section-title">Hide Message</div>
+        <div class="section-desc">Embed an encrypted secret into any image using LSB steganography.</div>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-left"><div class="step-num">01</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <div class="step-label"><span>🖼️</span> Upload Cover Image</div>
+            <div class="drop-zone" id="hide-drop">
+              <div class="drop-icon">📁</div>
+              <div class="drop-title">Click to browse or drag & drop</div>
+              <div class="drop-sub">All image formats supported</div>
+            </div>
+            <div class="file-info" id="hide-file-info" style="display:none">
+              <img class="file-preview" id="hide-preview" src="" alt="">
+              <div class="file-meta">
+                <div class="file-name" id="hide-fname"></div>
+                <div class="file-size" id="hide-fsize"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-left"><div class="step-num">02</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <div class="step-label"><span>✍️</span> Enter Secret Message</div>
+            <textarea id="hide-message" placeholder="Type your secret message here... supports all languages (UTF-8)" rows="4" oninput="updateCharCount()"></textarea>
+            <div class="char-count" id="char-count">0 characters</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-left"><div class="step-num">03</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <div class="step-label"><span>🔑</span> Encryption Password</div>
+            <div class="input-wrap">
+              <input type="password" id="hide-password" placeholder="Min. 8 characters">
+              <button class="pw-toggle" onclick="togglePw('hide-password', this)">👁</button>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-left"><div class="step-num">04</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <div class="step-label"><span>⚙️</span> Process</div>
+            <button class="btn-primary" id="hide-btn" onclick="hideMessage()">
+              <span class="spinner" id="hide-spinner"></span>
+              <span id="hide-btn-text">Hide Message in Image</span>
+            </button>
+            <div class="progress-bar" id="hide-progress" style="display:none">
+              <div class="progress-fill" id="hide-progress-fill"></div>
+            </div>
+            <div class="error-msg" id="hide-error"></div>
+          </div>
+        </div>
+      </div>
+      <div class="results-panel" id="hide-results">
+        <div class="results-header">✅ Message Hidden Successfully</div>
+        <div class="results-body">
+          <img class="stego-preview show" id="stego-preview" src="" alt="Stego Image">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+            <button class="btn-download" onclick="downloadStego()">⬇ Download PNG</button>
+            <button class="btn-download" onclick="sendToTransfer()">📡 Send to Device</button>
+          </div>
+          <div class="divider"></div>
+          <div class="result-grid">
+            <div class="result-item"><div class="result-label">Encryption</div><div class="result-value">AES-256-CBC</div></div>
+            <div class="result-item"><div class="result-label">Integrity</div><div class="result-value">MD5 Hash</div></div>
+            <div class="result-item full"><div class="result-label">MD5 Hash (32 chars)</div><div class="result-value" id="hide-hash">—</div></div>
+            <div class="result-item full"><div class="result-label">Ciphertext (preview)</div><div class="result-value" id="hide-cipher">—</div></div>
+            <div class="result-item"><div class="result-label">Payload Size</div><div class="result-value" id="hide-payload-size">—</div></div>
+            <div class="result-item"><div class="result-label">Image Capacity Used</div><div class="result-value" id="hide-cap-pct">—</div><div class="cap-bar"><div class="cap-fill" id="hide-cap-bar"></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ EXTRACT PAGE ═══════════════════════════════════════ -->
+    <div class="page" id="page-extract">
+      <div class="section-header">
+        <div class="section-tag">// Mode 02</div>
+        <div class="section-title">Extract Message</div>
+        <div class="section-desc">Retrieve and verify a hidden message from any stego image.</div>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-left"><div class="step-num">01</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <div class="step-label"><span>🖼️</span> Upload Stego Image</div>
+            <div class="drop-zone" id="extract-drop">
+              <div class="drop-icon">📁</div>
+              <div class="drop-title">Click to browse or drag & drop</div>
+              <div class="drop-sub">Supports PNG, JPG, WEBP, BMP, etc.</div>
+            </div>
+            <div class="file-info" id="extract-file-info" style="display:none">
+              <img class="file-preview" id="extract-preview" src="" alt="">
+              <div class="file-meta">
+                <div class="file-name" id="extract-fname"></div>
+                <div class="file-size" id="extract-fsize"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-left"><div class="step-num">02</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <div class="step-label"><span>🔑</span> Decryption Password</div>
+            <div class="input-wrap">
+              <input type="password" id="extract-password" placeholder="Enter the password used when hiding">
+              <button class="pw-toggle" onclick="togglePw('extract-password', this)">👁</button>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-left"><div class="step-num">03</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <div class="step-label"><span>🔍</span> Extract</div>
+            <button class="btn-primary" id="extract-btn" onclick="extractMessage()">
+              <span class="spinner" id="extract-spinner"></span>
+              <span id="extract-btn-text">Extract Hidden Message</span>
+            </button>
+            <div class="progress-bar" id="extract-progress" style="display:none">
+              <div class="progress-fill" id="extract-progress-fill"></div>
+            </div>
+            <div class="error-msg" id="extract-error"></div>
+          </div>
+        </div>
+      </div>
+      <div class="results-panel" id="extract-results">
+        <div class="results-header">🔓 Extraction Complete</div>
+        <div class="results-body">
+          <div class="result-item full" style="margin-bottom:12px">
+            <div class="result-label">Decrypted Message</div>
+            <div class="plaintext-result">
+              <button class="copy-btn-abs" onclick="copyPlaintext()">copy</button>
+              <span id="extract-plaintext-text"></span>
+            </div>
+          </div>
+          <div class="result-grid">
+            <div class="result-item full"><div class="result-label">Extracted Ciphertext</div><div class="result-value" id="extract-cipher">—</div></div>
+            <div class="result-item"><div class="result-label">Stored MD5 (32 chars)</div><div class="result-value" id="extract-stored-hash">—</div></div>
+            <div class="result-item"><div class="result-label">Computed MD5 (32 chars)</div><div class="result-value" id="extract-computed-hash">—</div></div>
+          </div>
+          <div class="integrity-box" id="integrity-box">
+            <span id="integrity-icon"></span>
+            <span id="integrity-text"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ TRANSFER PAGE ══════════════════════════════════════ -->
+    <div class="page" id="page-transfer">
+      <div class="section-header">
+        <div class="section-tag">// Mode 03</div>
+        <div class="section-title">Transfer Image</div>
+        <div class="section-desc">Send the stego image directly to another device — no cables, no cloud.</div>
+      </div>
+
+      <!-- How it works -->
+      <div class="how-box">
+        <div class="how-title">How it works</div>
+        <div class="how-steps">
+          <div class="how-step"><span>01</span><span>Device 1 (Sender) clicks <b>Start Sending</b> — a 4-digit room code will appear</span></div>
+          <div class="how-step"><span>02</span><span>Device 2 (Receiver) enters the same code and clicks <b>Connect</b></span></div>
+          <div class="how-step"><span>03</span><span>Once connected, the Sender selects the stego image and clicks <b>Send Image</b></span></div>
+          <div class="how-step"><span>04</span><span>Image arrives instantly — Receiver clicks <b>Open in Extract Tab</b> to decrypt</span></div>
+        </div>
+      </div>
+
+      <div class="transfer-grid">
+
+        <!-- SENDER CARD -->
+        <div class="peer-card">
+          <div class="peer-card-head">📤 Sender (Device 1)</div>
+          <div class="peer-card-body">
+            <div class="status-line">
+              <div class="status-dot" id="sender-dot"></div>
+              <span id="sender-status">Not started</span>
+            </div>
+
+            <div id="sender-code-area" style="display:none">
+              <div class="result-label" style="margin-bottom:6px">Your Room Code — share with receiver</div>
+              <div class="peer-id-box" id="sender-code-display">—</div>
+              <div class="qr-area">
+                <button class="copy-id-btn" onclick="copySenderCode()">📋 Copy Code</button>
+              </div>
+            </div>
+
+            <button class="btn-secondary" id="sender-start-btn" onclick="startSender()">🔌 Start Sending</button>
+
+            <div id="sender-send-area" style="display:none;margin-top:16px">
+              <div class="divider"></div>
+              <div class="result-label" style="margin-bottom:8px">Choose image to send</div>
+              <div class="drop-zone" id="transfer-drop" style="padding:24px">
+                <div class="drop-icon" style="font-size:24px">🖼️</div>
+                <div class="drop-title" style="font-size:13px">Click to select image</div>
+                <div class="drop-sub">or use "Send to Device" from Hide tab</div>
+              </div>
+              <div class="file-info" id="transfer-file-info" style="display:none;margin-top:8px">
+                <img class="file-preview" id="transfer-preview" src="" alt="">
+                <div class="file-meta">
+                  <div class="file-name" id="transfer-fname"></div>
+                  <div class="file-size" id="transfer-fsize"></div>
+                </div>
+              </div>
+              <button class="btn-secondary" id="send-img-btn" onclick="sendImage()" style="margin-top:10px" disabled>📡 Send Image</button>
+            </div>
+
+            <div class="transfer-progress-wrap" id="send-progress-wrap">
+              <div class="transfer-progress-label"><span>Sending…</span><span id="send-pct">0%</span></div>
+              <div class="xfer-bar"><div class="xfer-fill" id="send-fill"></div></div>
+            </div>
+            <div class="error-msg" id="sender-error"></div>
+          </div>
+        </div>
+
+        <!-- RECEIVER CARD -->
+        <div class="peer-card">
+          <div class="peer-card-head">📥 Receiver (Device 2)</div>
+          <div class="peer-card-body">
+            <div class="status-line">
+              <div class="status-dot" id="receiver-dot"></div>
+              <span id="receiver-status">Not started</span>
+            </div>
+
+            <div class="result-label" style="margin-bottom:6px">Enter Sender's Room Code</div>
+            <input type="text" class="code-input" id="receiver-code-input" placeholder="Enter 4-digit code" maxlength="4" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+            <button class="btn-secondary" id="receiver-connect-btn" onclick="startReceiver()">🔗 Connect to Sender</button>
+
+            <div class="transfer-progress-wrap" id="recv-progress-wrap">
+              <div class="transfer-progress-label"><span>Receiving…</span><span id="recv-pct">0%</span></div>
+              <div class="xfer-bar"><div class="xfer-fill" id="recv-fill"></div></div>
+            </div>
+            <div class="error-msg" id="receiver-error"></div>
+
+            <!-- Received image panel -->
+            <div class="received-panel" id="received-panel">
+              <div class="received-head">✅ Image Received!</div>
+              <div class="received-body">
+                <img class="received-img" id="received-img" src="" alt="Received">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn-download" onclick="openInExtract()">🔓 Open in Extract Tab</button>
+                  <button class="btn-download" onclick="downloadReceived()">⬇ Download</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /transfer-grid -->
+    </div><!-- /page-transfer -->
+
+  </div>
+</main>
+
+<canvas id="canvas" style="display:none"></canvas>
+
+<script>
+// ══════════════════════════════════════════════
+// GLOBALS
+// ══════════════════════════════════════════════
+let hideImg = null, extractImg = null, transferImg = null;
+let stegoCanvas = null;
+let receivedBlob = null;
+const DELIMITER = '||||END||||';
+
+// PeerJS state
+let senderPeer = null, senderConn = null;
+let receiverPeer = null, receiverConn = null;
+let transferImageBlob = null; // blob ready to send
+
+// ══════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════
+function switchTab(mode) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['hide','extract','transfer'][i] === mode);
+  });
+  ['hide','extract','transfer'].forEach(m => {
+    document.getElementById('page-'+m).classList.toggle('active', m === mode);
+  });
+}
+
+// ══════════════════════════════════════════════
+// FILE DROP ZONES
+// ══════════════════════════════════════════════
+function initDrop(dropId, inputId, previewId, fnameId, fsizeId, infoId, onReady) {
+  const drop  = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  drop.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { if (input.files[0]) loadFile(input.files[0]); });
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag-over'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+  function loadFile(file) {
+    if (!file.type.startsWith('image/')) { alert('Please select an image file.'); return; }
+    const url = URL.createObjectURL(file);
+    if (fnameId) document.getElementById(fnameId).textContent = file.name;
+    if (fsizeId) document.getElementById(fsizeId).textContent = fmtBytes(file.size);
+    if (infoId)  document.getElementById(infoId).style.display = 'flex';
+    if (previewId) document.getElementById(previewId).src = url;
+    const img = new Image();
+    img.onload  = () => onReady(img, file, url);
+    img.onerror = () => alert('Failed to load image.');
+    img.src = url;
+  }
+}
+
+initDrop('hide-drop','hide-file','hide-preview','hide-fname','hide-fsize','hide-file-info', (img) => {
+  hideImg = img; document.getElementById('hide-results').classList.remove('show');
+});
+initDrop('extract-drop','extract-file','extract-preview','extract-fname','extract-fsize','extract-file-info', (img) => {
+  extractImg = img; document.getElementById('extract-results').classList.remove('show');
+});
+initDrop('transfer-drop','transfer-file','transfer-preview','transfer-fname','transfer-fsize','transfer-file-info', (img, file, url) => {
+  transferImageBlob = file;
+  // Only enable send if connection is already open
+  if (senderConn && senderConn.open) document.getElementById('send-img-btn').disabled = false;
+});
+
+// ══════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(2) + ' MB';
+}
+function updateCharCount() {
+  document.getElementById('char-count').textContent = document.getElementById('hide-message').value.length.toLocaleString() + ' characters';
+}
+function togglePw(id, btn) {
+  const el = document.getElementById(id);
+  el.type = el.type === 'password' ? 'text' : 'password';
+  btn.textContent = el.type === 'password' ? '👁' : '🙈';
+}
+function copyPlaintext() {
+  const txt = document.getElementById('extract-plaintext-text').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.querySelector('.copy-btn-abs');
+    btn.textContent = '✓ copied'; setTimeout(() => btn.textContent = 'copy', 1500);
+  });
+}
+function showErr(id, msg) { const e = document.getElementById(id); e.textContent = msg; e.classList.add('show'); }
+function clearErr(id) { document.getElementById(id).classList.remove('show'); }
+function setProg(id, pct) { document.getElementById(id).style.width = pct + '%'; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ══════════════════════════════════════════════
+// CRYPTO
+// ══════════════════════════════════════════════
+function md5(s) { return CryptoJS.MD5(s).toString(); }
+
+function encryptAES(plaintext, password) {
+  const key = CryptoJS.enc.Utf8.parse(CryptoJS.SHA256(password).toString().substring(0, 32));
+  const iv   = CryptoJS.lib.WordArray.random(16);
+  const salt = CryptoJS.lib.WordArray.random(8);
+  const enc  = CryptoJS.AES.encrypt(CryptoJS.enc.Utf8.parse(plaintext), key, { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
+  return CryptoJS.enc.Hex.stringify(salt) + ':' + CryptoJS.enc.Hex.stringify(iv) + ':' + enc.ciphertext.toString(CryptoJS.enc.Base64);
+}
+
+function decryptAES(data, password) {
+  const parts = data.split(':');
+  if (parts.length !== 3) throw new Error('Invalid ciphertext format');
+  const key = CryptoJS.enc.Utf8.parse(CryptoJS.SHA256(password).toString().substring(0, 32));
+  const iv  = CryptoJS.enc.Hex.parse(parts[1]);
+  const dec = CryptoJS.AES.decrypt({ ciphertext: CryptoJS.enc.Base64.parse(parts[2]) }, key, { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
+  const res = dec.toString(CryptoJS.enc.Utf8);
+  if (!res) throw new Error('Decryption failed — wrong password?');
+  return res;
+}
+
+// ══════════════════════════════════════════════
+// LSB
+// ══════════════════════════════════════════════
+function strToBits(str) {
+  const bytes = new TextEncoder().encode(str), bits = [];
+  for (const b of bytes) for (let i = 7; i >= 0; i--) bits.push((b >> i) & 1);
+  return bits;
+}
+function bitsToStr(bits) {
+  const bytes = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let b = 0;
+    for (let j = 0; j < 8; j++) b = (b << 1) | (bits[i+j] || 0);
+    bytes.push(b);
+  }
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}
+function embedLSB(imgData, bits) {
+  const d = imgData.data, cap = Math.floor((d.length / 4) * 3);
+  if (bits.length > cap) throw new Error('Message too large. Max: ' + Math.floor(cap/8) + ' bytes');
+  let idx = 0;
+  for (let i = 0; i < d.length && idx < bits.length; i++) {
+    if (i % 4 === 3) continue;
+    d[i] = (d[i] & 0xFE) | bits[idx++];
+  }
+}
+function extractLSB(imgData, maxBits) {
+  const d = imgData.data, bits = [];
+  for (let i = 0; i < d.length && bits.length < maxBits; i++) {
+    if (i % 4 === 3) continue;
+    bits.push(d[i] & 1);
+  }
+  return bits;
+}
+
+// ══════════════════════════════════════════════
+// HIDE
+// ══════════════════════════════════════════════
+async function hideMessage() {
+  clearErr('hide-error');
+  const msg = document.getElementById('hide-message').value;
+  const pw  = document.getElementById('hide-password').value;
+  if (!hideImg)      return showErr('hide-error', '⚠ Please upload an image first.');
+  if (!msg.trim())   return showErr('hide-error', '⚠ Please enter a secret message.');
+  if (pw.length < 8) return showErr('hide-error', '⚠ Password must be at least 8 characters.');
+
+  const btn = document.getElementById('hide-btn');
+  btn.disabled = true;
+  document.getElementById('hide-spinner').classList.add('show');
+  document.getElementById('hide-btn-text').textContent = 'Processing...';
+  document.getElementById('hide-progress').style.display = 'block';
+  setProg('hide-progress-fill', 15); await sleep(30);
+
+  try {
+    setProg('hide-progress-fill', 30);
+    const hash = md5(msg), cipher = encryptAES(msg, pw);
+    const payload = hash + '||' + cipher + DELIMITER;
+    setProg('hide-progress-fill', 50);
+
+    const cvs = document.getElementById('canvas');
+    cvs.width = hideImg.naturalWidth; cvs.height = hideImg.naturalHeight;
+    const ctx = cvs.getContext('2d');
+    ctx.drawImage(hideImg, 0, 0);
+    const imd = ctx.getImageData(0, 0, cvs.width, cvs.height);
+    setProg('hide-progress-fill', 65);
+
+    const bits = strToBits(payload);
+    const totalCap = Math.floor((imd.data.length / 4) * 3);
+    const capPct = ((bits.length / totalCap) * 100).toFixed(1);
+    embedLSB(imd, bits);
+    ctx.putImageData(imd, 0, 0);
+    stegoCanvas = cvs;
+    setProg('hide-progress-fill', 90);
+
+    document.getElementById('stego-preview').src = cvs.toDataURL('image/png');
+    document.getElementById('hide-hash').textContent = hash + ' (' + hash.length + ' chars)';
+    document.getElementById('hide-cipher').textContent = cipher.substring(0, 80) + '…';
+    document.getElementById('hide-payload-size').textContent = new TextEncoder().encode(payload).length + ' bytes';
+    document.getElementById('hide-cap-pct').textContent = capPct + '%';
+    const bar = document.getElementById('hide-cap-bar');
+    bar.style.width = capPct + '%';
+    bar.className = 'cap-fill ' + (capPct < 30 ? 'low' : capPct < 70 ? 'med' : 'high');
+    setProg('hide-progress-fill', 100);
+    document.getElementById('hide-results').classList.add('show');
+    document.getElementById('hide-results').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch(e) { showErr('hide-error', '❌ ' + e.message); }
+
+  btn.disabled = false;
+  document.getElementById('hide-spinner').classList.remove('show');
+  document.getElementById('hide-btn-text').textContent = 'Hide Message in Image';
+  setTimeout(() => { document.getElementById('hide-progress').style.display = 'none'; setProg('hide-progress-fill', 0); }, 800);
+}
+
+function downloadStego() {
+  if (!stegoCanvas) return;
+  const a = document.createElement('a');
+  a.download = 'stego_' + Date.now() + '.png';
+  a.href = stegoCanvas.toDataURL('image/png');
+  a.click();
+}
+
+// "Send to Device" button in Hide results
+function sendToTransfer() {
+  if (!stegoCanvas) return;
+  stegoCanvas.toBlob(blob => {
+    transferImageBlob = blob;
+    // show in transfer tab UI
+    const url = URL.createObjectURL(blob);
+    document.getElementById('transfer-preview').src = url;
+    document.getElementById('transfer-fname').textContent = 'stego_image.png';
+    document.getElementById('transfer-fsize').textContent = fmtBytes(blob.size);
+    document.getElementById('transfer-file-info').style.display = 'flex';
+    document.getElementById('send-img-btn').disabled = false;
+    switchTab('transfer');
+  }, 'image/png');
+}
+
+// ══════════════════════════════════════════════
+// EXTRACT
+// ══════════════════════════════════════════════
+async function extractMessage() {
+  clearErr('extract-error');
+  const pw = document.getElementById('extract-password').value;
+  if (!extractImg) return showErr('extract-error', '⚠ Please upload a stego image.');
+  if (!pw)         return showErr('extract-error', '⚠ Please enter the decryption password.');
+
+  const btn = document.getElementById('extract-btn');
+  btn.disabled = true;
+  document.getElementById('extract-spinner').classList.add('show');
+  document.getElementById('extract-btn-text').textContent = 'Extracting...';
+  document.getElementById('extract-progress').style.display = 'block';
+  setProg('extract-progress-fill', 15); await sleep(30);
+
+  try {
+    const cvs = document.getElementById('canvas');
+    cvs.width = extractImg.naturalWidth; cvs.height = extractImg.naturalHeight;
+    const ctx = cvs.getContext('2d');
+    ctx.drawImage(extractImg, 0, 0);
+    const imd = ctx.getImageData(0, 0, cvs.width, cvs.height);
+    setProg('extract-progress-fill', 35);
+
+    const maxBits = Math.floor((imd.data.length / 4) * 3);
+    const bits = extractLSB(imd, maxBits);
+    setProg('extract-progress-fill', 60);
+
+    const CHUNK = 1024;
+    let payload = '', found = false;
+    for (let i = 0; i < bits.length; i += CHUNK * 8) {
+      payload += bitsToStr(bits.slice(i, i + CHUNK * 8));
+      if (payload.includes(DELIMITER)) { found = true; break; }
+    }
+    if (!found) throw new Error('No hidden message found, or the image has been modified.');
+    payload = payload.substring(0, payload.indexOf(DELIMITER));
+    setProg('extract-progress-fill', 78);
+
+    const sep = payload.indexOf('||');
+    if (sep === -1) throw new Error('Payload corrupted — not a valid stego image.');
+    const storedHash = payload.substring(0, sep);
+    const cipherText = payload.substring(sep + 2);
+    const plaintext  = decryptAES(cipherText, pw);
+    setProg('extract-progress-fill', 92);
+
+    const computedHash = md5(plaintext);
+    const match = storedHash === computedHash;
+
+    document.getElementById('extract-plaintext-text').textContent = plaintext;
+    document.getElementById('extract-cipher').textContent = cipherText.substring(0, 80) + '…';
+    document.getElementById('extract-stored-hash').textContent = storedHash;
+    document.getElementById('extract-computed-hash').textContent = computedHash;
+
+    const ibox = document.getElementById('integrity-box');
+    document.getElementById('integrity-icon').textContent = match ? '✅' : '❌';
+    document.getElementById('integrity-text').textContent = match
+      ? 'Hash Match — Message Integrity VERIFIED'
+      : 'Hash Mismatch — Message may be TAMPERED or password is wrong';
+    ibox.className = 'integrity-box ' + (match ? 'ok' : 'fail');
+
+    setProg('extract-progress-fill', 100);
+    document.getElementById('extract-results').classList.add('show');
+    document.getElementById('extract-results').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch(e) { showErr('extract-error', '❌ ' + e.message); }
+
+  btn.disabled = false;
+  document.getElementById('extract-spinner').classList.remove('show');
+  document.getElementById('extract-btn-text').textContent = 'Extract Hidden Message';
+  setTimeout(() => { document.getElementById('extract-progress').style.display = 'none'; setProg('extract-progress-fill', 0); }, 800);
+}
+
+// ══════════════════════════════════════════════
+// TRANSFER — PeerJS
+// ══════════════════════════════════════════════
+
+function randomCode() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function setSenderStatus(dot, text) {
+  const d = document.getElementById('sender-dot');
+  d.className = 'status-dot ' + dot;
+  document.getElementById('sender-status').textContent = text;
+}
+function setReceiverStatus(dot, text) {
+  const d = document.getElementById('receiver-dot');
+  d.className = 'status-dot ' + dot;
+  document.getElementById('receiver-status').textContent = text;
+}
+
+// ── SENDER ────────────────────────────────────
+function startSender() {
+  clearErr('sender-error');
+  setSenderStatus('busy', 'Connecting to relay…');
+  document.getElementById('sender-start-btn').disabled = true;
+
+  const code = randomCode();
+  senderPeer = new Peer('stego-' + code, {
+    config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+  });
+
+  senderPeer.on('open', () => {
+    setSenderStatus('online', 'Ready — waiting for receiver…');
+    document.getElementById('sender-code-display').textContent = code;
+    document.getElementById('sender-code-area').style.display = 'block';
+    document.getElementById('sender-send-area').style.display = 'block';
+  });
+
+  senderPeer.on('connection', conn => {
+    setSenderStatus('busy', 'Receiver found — opening channel…');
+    conn.on('open', () => {
+      senderConn = conn; // assign ONLY after open
+      setSenderStatus('online', '🟢 Connected — ready to send');
+      document.getElementById('send-img-btn').disabled = (transferImageBlob === null);
+    });
+    conn.on('error', e => { setSenderStatus('error', 'Connection error'); showErr('sender-error', '❌ ' + e); });
+  });
+
+  senderPeer.on('error', e => {
+    const msg = String(e);
+    if (msg.includes('unavailable-id')) {
+      // Code taken, regenerate
+      senderPeer.destroy();
+      startSender();
+      return;
+    }
+    setSenderStatus('error', 'Failed — tap Start again');
+    showErr('sender-error', '❌ Could not connect to relay server. Make sure you have internet access, then try again.');
+    document.getElementById('sender-start-btn').disabled = false;
+    document.getElementById('sender-start-btn').textContent = '🔄 Try Again';
+  });
+
+  senderPeer.on('disconnected', () => {
+    if (senderPeer && !senderPeer.destroyed) senderPeer.reconnect();
+  });
+}
+
+function copySenderCode() {
+  const code = document.getElementById('sender-code-display').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.querySelector('.copy-id-btn');
+    btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = '📋 Copy Code', 1500);
+  });
+}
+
+async function sendImage() {
+  if (!transferImageBlob) return showErr('sender-error', '⚠ No image selected.');
+  if (!senderConn)        return showErr('sender-error', '⚠ No receiver connected yet. Wait for receiver to enter the code.');
+  if (!senderConn.open)   return showErr('sender-error', '⚠ Connection not ready yet. Wait a moment and try again.');
+
+  clearErr('sender-error');
+  const wrap = document.getElementById('send-progress-wrap');
+  wrap.style.display = 'block';
+  setProg('send-fill', 10);
+  document.getElementById('send-pct').textContent = '10%';
+
+  // Read blob as ArrayBuffer then send as chunks
+  const CHUNK_SIZE = 64 * 1024; // 64 KB per chunk
+  const buf = await transferImageBlob.arrayBuffer();
+  const total = buf.byteLength;
+  const totalChunks = Math.ceil(total / CHUNK_SIZE);
+
+  // Send metadata first
+  senderConn.send({ type: 'meta', totalChunks, size: total, mimeType: 'image/png' });
+  await sleep(100);
+
+  for (let i = 0; i < totalChunks; i++) {
+    const slice = buf.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    senderConn.send({ type: 'chunk', index: i, data: slice });
+    const pct = Math.round(((i + 1) / totalChunks) * 100);
+    setProg('send-fill', pct);
+    document.getElementById('send-pct').textContent = pct + '%';
+    await sleep(10); // yield to UI
+  }
+
+  senderConn.send({ type: 'done' });
+  setSenderStatus('online', '✅ Image sent successfully!');
+}
+
+// ── RECEIVER ──────────────────────────────────
+function startReceiver() {
+  clearErr('receiver-error');
+  const code = document.getElementById('receiver-code-input').value.trim();
+  if (code.length !== 4) return showErr('receiver-error', '⚠ Enter the 4-digit code from the sender.');
+
+  setReceiverStatus('busy', 'Connecting…');
+  document.getElementById('receiver-connect-btn').disabled = true;
+
+  receiverPeer = new Peer({
+    config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+  });
+
+  receiverPeer.on('open', () => {
+    setReceiverStatus('busy', 'Reaching sender…');
+    receiverConn = receiverPeer.connect('stego-' + code, { reliable: true });
+
+    // Chunk reassembly state
+    let chunks = [], totalChunks = 0, mimeType = 'image/png';
+
+    receiverConn.on('open', () => {
+      setReceiverStatus('online', '🟢 Connected to sender!');
+      document.getElementById('recv-progress-wrap').style.display = 'block';
+    });
+
+    receiverConn.on('data', msg => {
+      if (msg.type === 'meta') {
+        totalChunks = msg.totalChunks;
+        chunks = new Array(totalChunks);
+        mimeType = msg.mimeType || 'image/png';
+        setReceiverStatus('online', 'Receiving image…');
+      } else if (msg.type === 'chunk') {
+        chunks[msg.index] = msg.data;
+        const received = chunks.filter(Boolean).length;
+        const pct = Math.round((received / totalChunks) * 100);
+        setProg('recv-fill', pct);
+        document.getElementById('recv-pct').textContent = pct + '%';
+      } else if (msg.type === 'done') {
+        const blob = new Blob(chunks, { type: mimeType });
+        receivedBlob = blob;
+        const url = URL.createObjectURL(blob);
+        document.getElementById('received-img').src = url;
+        document.getElementById('received-panel').classList.add('show');
+        setReceiverStatus('online', '✅ Image received!');
+        setProg('recv-fill', 100);
+        document.getElementById('recv-pct').textContent = '100%';
+      }
+    });
+
+    receiverConn.on('error', e => {
+      setReceiverStatus('error', 'Connection error');
+      showErr('receiver-error', '❌ ' + e);
+    });
+  });
+
+  receiverPeer.on('error', e => {
+    const msg = String(e);
+    let hint = 'Check the code and try again.';
+    if (msg.includes('peer-unavailable')) hint = 'Sender not found — make sure the sender pressed "Start Sending" first and the code is correct.';
+    if (msg.includes('Lost connection'))  hint = 'Lost connection to relay. Check your internet and try again.';
+    setReceiverStatus('error', 'Could not connect');
+    showErr('receiver-error', '❌ ' + hint);
+    document.getElementById('receiver-connect-btn').disabled = false;
+  });
+
+  receiverPeer.on('disconnected', () => {
+    if (receiverPeer && !receiverPeer.destroyed) receiverPeer.reconnect();
+  });
+}
+
+// Open received image in Extract tab
+function openInExtract() {
+  if (!receivedBlob) return;
+  const url = URL.createObjectURL(receivedBlob);
+  const img = new Image();
+  img.onload = () => {
+    extractImg = img;
+    document.getElementById('extract-preview').src = url;
+    document.getElementById('extract-fname').textContent = 'received_stego.png';
+    document.getElementById('extract-fsize').textContent = fmtBytes(receivedBlob.size);
+    document.getElementById('extract-file-info').style.display = 'flex';
+    document.getElementById('extract-results').classList.remove('show');
+    switchTab('extract');
+    document.querySelector('#page-extract .section-title').scrollIntoView({ behavior: 'smooth' });
+  };
+  img.src = url;
+}
+
+function downloadReceived() {
+  if (!receivedBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(receivedBlob);
+  a.download = 'received_stego.png'; a.click();
+}
+</script>
+</body>
+</html>
